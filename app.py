@@ -2,7 +2,7 @@ import json
 import urllib.request
 
 import streamlit as st
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS, TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 st.set_page_config(page_title="Narrow Road Oracle", layout="centered")
@@ -49,15 +49,25 @@ def load_bible():
     return verses
 
 
+# Common filler words to skip, plus old King James forms like "unto" and "thee".
+# "find", "found" and "give" are kept in, because seeking and finding matter here.
+KJV_FILLER = {
+    "unto", "thee", "thou", "thy", "thine", "ye", "hath", "hast", "doth", "dost",
+    "saith", "said", "shall", "shalt", "wilt", "art", "lo", "behold", "yea",
+    "came", "come", "cometh", "went", "let", "things", "man", "men",
+}
+STOP_WORDS = sorted((ENGLISH_STOP_WORDS - {"find", "found", "give"}) | KJV_FILLER)
+
+
 @st.cache_resource(show_spinner="Preparing the road...")
 def build_index():
     verses = load_bible()
-    vec = TfidfVectorizer(stop_words="english", sublinear_tf=True)
+    vec = TfidfVectorizer(stop_words=STOP_WORDS, sublinear_tf=True)
     mat = vec.fit_transform([t for _, t in verses])
     return verses, vec, mat
 
 
-def seek(query, k=3):
+def seek(query, k=5):
     verses, vec, mat = build_index()
     scores = cosine_similarity(vec.transform([query]), mat)[0]
     ranked = scores.argsort()[::-1]
@@ -71,36 +81,177 @@ def get_api_key():
         return None
 
 
-def shared_words(question, found):
-    """Words from the seeker's question that also appear in the verses found."""
-    _, vec, _ = build_index()
-    analyzer = vec.build_analyzer()
-    asked = set(analyzer(question))
-    in_verses = set()
-    for _, text in found:
-        in_verses |= set(analyzer(text))
-    return sorted(asked & in_verses)
+# ---------- The simple reading (no API key needed) ----------
+
+# Where each book sits in the Bible, by its position in BOOKS
+SECTIONS = [
+    (0, 4, "the Law", "Old Testament"),
+    (5, 16, "the History books", "Old Testament"),
+    (17, 21, "the Wisdom books", "Old Testament"),
+    (22, 26, "the Major Prophets", "Old Testament"),
+    (27, 38, "the Minor Prophets", "Old Testament"),
+    (39, 42, "the Gospels", "New Testament"),
+    (43, 43, "the Acts of the Apostles", "New Testament"),
+    (44, 64, "the Letters", "New Testament"),
+    (65, 65, "Revelation", "New Testament"),
+]
+
+# Key words: the KJV forms, then the Greek word it most often translates in the
+# New Testament and the Hebrew word it most often translates in the Old Testament.
+WORDS_BENEATH = {
+    "seek": ({"seek", "seeketh", "seeking", "sought"},
+             ("ζητέω", "zēteō", "to seek, search for, strive after"),
+             ("בָּקַשׁ", "baqash", "to seek, search out, desire")),
+    "find": ({"find", "findeth", "found", "finding"},
+             ("εὑρίσκω", "heuriskō", "to find, discover (the root of 'eureka')"),
+             ("מָצָא", "matsa", "to find, come upon, attain")),
+    "ask": ({"ask", "asketh", "asked", "asking"},
+            ("αἰτέω", "aiteō", "to ask, request"),
+            ("שָׁאַל", "shaal", "to ask, inquire")),
+    "knock": ({"knock", "knocketh", "knocked"},
+              ("κρούω", "krouō", "to knock at a door"),
+              None),
+    "way": ({"way", "ways", "path", "paths"},
+            ("ὁδός", "hodos", "road, path, way of life"),
+            ("דֶּרֶךְ", "derekh", "road, journey, way of living")),
+    "gate": ({"gate", "gates"},
+             ("πύλη", "pylē", "gate, entrance"),
+             ("שַׁעַר", "shaar", "gate")),
+    "narrow": ({"strait", "narrow"},
+               ("στενός", "stenos", "narrow, tight"),
+               None),
+    "life": ({"life", "live", "liveth", "living"},
+             ("ζωή", "zōē", "life, the fullness of life"),
+             ("חַיִּים", "chayyim", "life")),
+    "light": ({"light", "lights"},
+              ("φῶς", "phōs", "light"),
+              ("אוֹר", "or", "light")),
+    "heart": ({"heart", "hearts"},
+              ("καρδία", "kardia", "heart, the inner self"),
+              ("לֵב", "lev", "heart, mind, will")),
+    "peace": ({"peace"},
+              ("εἰρήνη", "eirēnē", "peace, wholeness, rest"),
+              ("שָׁלוֹם", "shalom", "peace, completeness, wellbeing")),
+    "truth": ({"truth", "true"},
+              ("ἀλήθεια", "alētheia", "truth, what is real and unhidden"),
+              ("אֱמֶת", "emet", "truth, faithfulness, firmness")),
+    "faith": ({"faith", "believe", "believeth", "believed"},
+              ("πίστις", "pistis", "faith, trust, faithfulness"),
+              None),
+    "hope": ({"hope", "hoped"},
+             ("ἐλπίς", "elpis", "hope, confident expectation"),
+             None),
+    "love": ({"love", "loveth", "loved", "charity"},
+             ("ἀγάπη", "agapē", "love that gives itself"),
+             ("אַהֲבָה", "ahavah", "love")),
+    "grace": ({"grace"},
+              ("χάρις", "charis", "grace, favour, gift"),
+              None),
+    "fear": ({"fear", "afraid", "feared"},
+             ("φόβος", "phobos", "fear, awe, reverence"),
+             ("יִרְאָה", "yirah", "fear, awe, reverence")),
+    "door": ({"door", "doors", "opened", "open"},
+             ("θύρα", "thyra", "door, entrance"),
+             None),
+}
+
+CLOSING_QUESTIONS = [
+    "What are these verses asking you to do next?",
+    "Which line stopped you, and why that one?",
+    "What would it look like to walk this answer for one week?",
+    "Where in your life is the gate narrow right now?",
+]
+
+
+def book_of(ref):
+    return ref.rsplit(" ", 1)[0]
+
+
+def place_of(ref):
+    """Section and testament for a reference like 'Psalm 27:8'."""
+    name = book_of(ref)
+    i = BOOKS.index(name) if name in BOOKS else -1
+    for lo, hi, section, testament in SECTIONS:
+        if lo <= i <= hi:
+            return i, section, testament
+    return i, "", ""
 
 
 def simple_reading(question, seeking, found):
-    """A reading built only from the seeker's words and the verses themselves."""
-    words = shared_words(question + " " + seeking, found)
-    lines = []
-    if words:
-        lines.append(
-            "The road met your question at these words: **"
-            + ", ".join(words) + "**."
-        )
-    first_ref, first_text = found[0]
-    lines.append(f"The first gate you passed was **{first_ref}**: *\"{first_text}\"*")
-    if len(found) > 1:
-        rest = "; ".join(f"**{r}**" for r, _ in found[1:])
-        lines.append(f"It is joined on the road by {rest}, which speak to the same need.")
-    lines.append(
-        "Read them together, slowly, as one answer. What do they ask of you, "
-        "and what do they promise?"
+    """A reading built only from the seeker's words and the real verses found."""
+    _, vec, _ = build_index()
+    words = vec.build_analyzer()
+    asked = set(words(question + " " + seeking))
+    verse_words = [set(words(t)) for _, t in found]
+    all_verse_words = set().union(*verse_words)
+
+    # Put the verses in the order they appear in the Bible
+    ordered = sorted(found, key=lambda rv: place_of(rv[0])[0])
+    places = [place_of(r) for r, _ in ordered]
+    sections = list(dict.fromkeys(p[1] for p in places if p[1]))
+    testaments = {p[2] for p in places if p[2]}
+
+    out = []
+
+    # 1. Where the road led
+    out.append("#### Where the road led")
+    if len(testaments) == 2:
+        span = "Your answer runs through both the Old and the New Testament"
+    elif testaments:
+        span = f"Your answer comes from the {testaments.pop()}"
+    else:
+        span = "Your answer"
+    if len(sections) > 1:
+        through = ", ".join(sections[:-1]) + " and " + sections[-1]
+    else:
+        through = sections[0] if sections else "the scriptures"
+    out.append(f"{span}, through {through}.")
+
+    # 2. What they share
+    met = sorted(asked & all_verse_words)
+    common = sorted(
+        w for w in all_verse_words
+        if sum(w in vw for vw in verse_words) >= 2 and len(w) > 3
     )
-    return "\n\n".join(lines)
+    out.append("#### What the verses share")
+    if met:
+        out.append("Your own words met the scripture at: **" + ", ".join(met) + "**.")
+    if common:
+        out.append("The verses speak to each other through: **" + ", ".join(common) + "**.")
+    if not met and not common:
+        out.append("Each verse answers from a different side. Read them as one voice.")
+
+    # 3. The verses, in the order they appear
+    out.append("#### The road, in order")
+    for (ref, text), (_, section, _) in zip(ordered, places):
+        out.append(f"**{ref}** · {section}\n\n> {text}")
+
+    # 4. Words beneath the words
+    notes = []
+    for key, (forms, greek, hebrew) in WORDS_BENEATH.items():
+        hits = [(r, place_of(r)[2]) for (r, _), vw in zip(found, verse_words) if vw & forms]
+        if not hits:
+            continue
+        refs = ", ".join(r for r, _ in hits)
+        lines = []
+        if greek and any(t == "New Testament" for _, t in hits):
+            lines.append(f"Greek **{greek[0]}** ({greek[1]}): {greek[2]}")
+        if hebrew and any(t == "Old Testament" for _, t in hits):
+            lines.append(f"Hebrew **{hebrew[0]}** ({hebrew[1]}): {hebrew[2]}")
+        if lines:
+            notes.append(f"- **{key}** ({refs}): " + "; ".join(lines))
+    if notes:
+        out.append("#### Words beneath the words")
+        out.append("\n".join(notes))
+        out.append("*The original word most often behind the English. Check an interlinear for the exact word in each verse.*")
+
+    # 5. Closing
+    out.append("#### Knock")
+    out.append(
+        "You asked, you sought, and you have knocked. "
+        + CLOSING_QUESTIONS[len(question + seeking) % len(CLOSING_QUESTIONS)]
+    )
+    return "\n\n".join(out)
 
 
 def ai_reading(question, seeking, found, key):
@@ -114,8 +265,10 @@ def ai_reading(question, seeking, found, key):
         f"Their question: {question}\n"
         f"What they are truly seeking: {seeking}\n\n"
         f"The verses they found:\n{verses}\n\n"
-        "Write a reading of two or three short paragraphs that brings these verses "
-        "together into one message for them. Rules: use only the verses above; "
+        "Write a reading of two or three short paragraphs that answers their question "
+        "directly, drawing the answer out of what these particular verses say "
+        "together. Make it specific to their question, not general encouragement. "
+        "Rules: use only the verses above; "
         "quote them word for word with their references; do not invent or reword "
         "scripture; do not predict the future or claim to speak for God. Speak "
         "warmly and plainly, as a reflection on what the verses say to their question."

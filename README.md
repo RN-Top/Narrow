@@ -1,17 +1,22 @@
-# # Narrow
+# Narrow
 
-A visual study of Matthew 7:13–14, "the narrow way", in its Greek structure.
+The Narrow Road Oracle, built on Matthew 7:7–8 and 7:13–14.
 
-## What it shows
-- **The Roads**: two paths branch from one gate. The broad way widens toward ἀπώλεια (destruction) and fills with many travellers; the narrow way tightens toward ζωή (life) with only a few.
-- **The Mirror**: the passage's five paired opposites (gate, way, destination, people, action), laid out side by side. The last pair, entering vs. finding, breaks the symmetry.
+> Ask, and it shall be given you; seek, and ye shall find; knock, and it shall be opened unto you. (Matthew 7:7)
+
+## How it works
+1. **Ask**: bring your question to the first gate.
+2. **Seek**: describe in your own words what you are truly looking for. The oracle searches a set of King James verses and finds the passages closest in meaning.
+3. **Knock**: the last gate opens and brings together your question, the verses you found, and the promise of Matthew 7:8.
+
+Every verse is quoted from the King James Version with its real reference. Nothing is generated or reworded.
 
 ## Run locally
     pip install -r requirements.txt
     streamlit run app.py
 
-## Text
-Matthew 7:13–14, Greek New Testament. Translations in the app are simple glosses.
+## Built with
+Streamlit and scikit-learn (TF-IDF matching).
 
 ## Author
 Erin Rae Toppe

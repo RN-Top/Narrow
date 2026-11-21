@@ -279,7 +279,8 @@ def ai_reading(question, seeking, found, key):
         max_tokens=700,
         messages=[{"role": "user", "content": prompt}],
     )
-    return msg.content[0].text
+    # The reply can start with a "thinking" block, so keep only the text blocks
+    return "\n\n".join(b.text for b in msg.content if b.type == "text").strip()
 
 
 def make_reading(question, seeking, found):

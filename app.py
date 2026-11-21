@@ -283,13 +283,17 @@ def ai_reading(question, seeking, found, key):
 
 
 def make_reading(question, seeking, found):
+    """Returns the reading and a status line saying whether the API was used."""
     key = get_api_key()
-    if key:
-        try:
-            return ai_reading(question, seeking, found, key)
-        except Exception as e:
-            st.warning(f"The written reading couldn't be reached ({e}). Showing the simple reading.")
-    return simple_reading(question, seeking, found)
+    if not key:
+        return (simple_reading(question, seeking, found),
+                "⚪ Simple reading: no API key found in Streamlit Secrets.")
+    try:
+        return (ai_reading(question, seeking, found, key),
+                "🟢 Written reading: API connected.")
+    except Exception as e:
+        return (simple_reading(question, seeking, found),
+                f"🔴 API key found but it didn't work: {e}")
 
 
 if "gate" not in st.session_state:
@@ -344,7 +348,7 @@ elif st.session_state.gate == 2:
         st.markdown(f"> {text}\n>\n> **{ref}** (KJV)")
     if st.button("Knock"):
         with st.spinner("Knocking..."):
-            st.session_state.reading = make_reading(
+            st.session_state.reading, st.session_state.status = make_reading(
                 st.session_state.question,
                 st.session_state.seeking,
                 st.session_state.found,
@@ -365,13 +369,14 @@ else:
             st.markdown(f"**{ref}**: {text}")
     st.subheader("Your reading")
     st.markdown(st.session_state.reading)
+    st.caption(st.session_state.get("status", ""))
     st.divider()
     st.markdown(
         f"<p style='text-align:center;{gold}'><i>{PROMISE[1]}</i><br>{PROMISE[0]}</p>",
         unsafe_allow_html=True,
     )
     if st.button("Walk again"):
-        for key in ("question", "seeking", "found", "reading"):
+        for key in ("question", "seeking", "found", "reading", "status"):
             st.session_state.pop(key, None)
         st.session_state.gate = 0
         st.rerun()

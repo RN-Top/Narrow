@@ -15,12 +15,24 @@ The Narrow Road Oracle, built on Matthew 7:7–8 and 7:13–14.
    answers your question from the verses you found, closing
    with the promise of Matthew 7:8.
 
+## After the reading
+
+- **Save reading**: download your question, the verses and
+  the reading together as a text file.
+- **Go deeper**: see the original Hebrew or Greek word under
+  each English word, with how it sounds, its meaning and its
+  Strong's number. Pick a word to follow it through every
+  verse where that same original word appears.
+
 ## Accuracy
 
 Every verse is quoted word for word from the King James
 Version, with its real reference. The reading uses only the
 verses you found. It never invents or rewords scripture,
 never predicts the future, and never claims to speak for God.
+Go deeper links words only by Strong's number, so it shows
+the same original word, never words that just look alike in
+English.
 
 ## Setup
 
@@ -38,8 +50,14 @@ Never put the key in the code or anywhere in this repo.
 
 ## Built with
 
-Streamlit, scikit-learn (TF-IDF verse matching) and the
-Anthropic API. King James Bible text (public domain).
+Streamlit, scikit-learn (TF-IDF verse matching), pandas and
+the Anthropic API.
+
+## Credits
+
+- King James Bible text (public domain).
+- Hebrew and Greek word data: STEP Bible, Tyndale House,
+  www.STEPBible.org, used under CC BY 4.0.
 
 ## Author
 

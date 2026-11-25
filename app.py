@@ -7,6 +7,8 @@ from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
+import deeper
+
 st.set_page_config(page_title="Narrow Road Oracle")
 
 KJV_URL = (
@@ -62,6 +64,27 @@ def build_index():
     vec = TfidfVectorizer(stop_words=STOP, sublinear_tf=True)
     mat = vec.fit_transform([t for _, t in verses])
     return verses, vec, mat
+
+
+@st.cache_resource
+def kjv_lookup():
+    return dict(load_bible())
+
+
+def save_text(ss):
+    lines = [
+        "THE NARROW ROAD",
+        "",
+        f"You asked: {ss.question}",
+        f"You sought: {ss.seeking}",
+        "",
+        "THE VERSES YOU FOUND (KJV)",
+    ]
+    for ref, text in ss.found:
+        lines.append(f"{ref}: {text}")
+    lines += ["", "YOUR READING", ss.reading or "", ""]
+    lines += [MT78, "Matthew 7:8"]
+    return "\n".join(lines)
 
 
 def seek(query, k=5):
@@ -186,6 +209,13 @@ else:
     if ss.reading:
         st.markdown(ss.reading)
     st.caption(ss.status)
+    st.download_button(
+        "Save reading",
+        save_text(ss),
+        file_name="narrow-road-reading.txt",
+    )
+    if st.toggle("Go deeper"):
+        deeper.show(ss.found, BOOKS, kjv_lookup())
     st.divider()
     st.markdown(
         f"<p style='{GOLD}'><i>{MT78}</i>"
